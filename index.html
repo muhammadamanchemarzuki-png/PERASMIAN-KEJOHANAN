@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gimik Perasmian Kejohanan Olahraga</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Cinzel & Montserrat untuk tema epik -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #090303;
+            overflow: hidden;
+            user-select: none;
+        }
+        .font-epic {
+            font-family: 'Cinzel', serif;
+        }
+        /* Kesan Cahaya Emas & Merah */
+        .gold-glow {
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 69, 0, 0.6);
+        }
+        .box-gold-glow {
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.4), inset 0 0 15px rgba(220, 38, 38, 0.4);
+        }
+        /* Animasi Sepanduk Perasmian */
+        @keyframes bannerReveal {
+            0% {
+                opacity: 0;
+                transform: scale(0.5) translateY(50px);
+                filter: blur(10px);
+            }
+            60% {
+                opacity: 1;
+                transform: scale(1.05) translateY(-5px);
+                filter: blur(0px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        .animate-banner {
+            animation: bannerReveal 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); opacity: 0.7; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.7; }
+        }
+        .animate-pulse-ring {
+            animation: pulseRing 2s infinite ease-in-out;
+        }
+        /* Latar Belakang Pentas Epik (Fallback / Mod Pentas) */
+        .stage-bg {
+            background: radial-gradient(circle at 50% 60%, #450a0a 0%, #1c0404 50%, #050101 100%);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative flex flex-col justify-between text-white stage-bg">
+
+    <!-- Video Webcam Tersembunyi untuk Pemprosesan MediaPipe -->
+    <video id="input_video" class="hidden" playsinline></video>
+
+    <!-- Kanvas Utama untuk Video, Kawah Obor, Obor Jari & Bunga Api -->
+    <canvas id="main_canvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
+
+    <!-- Lapisan Vignette Sinematik -->
+    <div class="absolute inset-0 pointer-events-none z-10 bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.85)_100%)]"></div>
+
+    <!-- Header / Tajuk Kejohanan -->
+    <header class="relative z-20 pt-4 px-6 flex flex-col sm:flex-row justify-between items-center gap-4 pointer-events-none">
+        <div class="text-center sm:text-left">
+            <div class="inline-block px-3 py-1 mb-1 rounded-full bg-red-900/60 border border-amber-500/40 text-amber-300 text-xs font-bold tracking-widest uppercase">
+                Majlis Perasmian Rasmi
+            </div>
+            <h1 class="font-epic text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 gold-glow tracking-wider">
+                KEJOHANAN OLAHRAGA TAHUNAN
+            </h1>
+        </div>
+
+        <!-- Panel Kawalan Pantas -->
+        <div class="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
+            <button id="btn_toggle_bg" class="px-4 py-2 rounded-xl bg-stone-900/80 hover:bg-stone-800 border border-amber-500/50 text-amber-300 text-xs sm:text-sm font-semibold transition flex items-center gap-2 shadow-lg">
+                <span id="bg_icon">🎥</span>
+                <span id="bg_text">Mod: Kamera Langsung</span>
+            </button>
+            <button id="btn_reset" class="px-4 py-2 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-200 text-xs sm:text-sm font-semibold transition flex items-center gap-2 shadow-lg">
+                <span>🔄</span>
+                <span>Set Semula</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Paparan Status / Arahan Interaktif -->
+    <div id="status_container" class="relative z-20 mx-auto mt-2 px-6 py-2.5 rounded-full bg-black/70 border border-amber-500/40 backdrop-blur-md text-center transition-all duration-300 pointer-events-none">
+        <p id="status_text" class="text-sm sm:text-base font-semibold text-amber-200 flex items-center justify-center gap-2">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+            Sila tekan "Mula Gimik" untuk mengaktifkan pengesan tangan...
+        </p>
+    </div>
+
+    <!-- Sepanduk Epik Perasmian (Tersembunyi sehingga kawah dinyalakan) -->
+    <div id="inauguration_banner" class="hidden fixed inset-0 z-30 flex flex-col items-center justify-center pointer-events-none px-4">
+        <div class="max-w-4xl w-full p-6 sm:p-10 rounded-3xl bg-gradient-to-b from-red-950/90 via-black/90 to-red-950/90 border-2 border-amber-400 box-gold-glow text-center backdrop-blur-md animate-banner">
+            <div class="flex justify-center items-center gap-3 mb-3">
+                <span class="h-[2px] w-12 sm:w-24 bg-gradient-to-r from-transparent to-amber-400"></span>
+                <span class="text-amber-400 text-sm sm:text-lg font-bold tracking-[0.3em] uppercase">Dengan Rasminya</span>
+                <span class="h-[2px] w-12 sm:w-24 bg-gradient-to-l from-transparent to-amber-400"></span>
+            </div>
+            
+            <h2 class="font-epic text-3xl sm:text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 via-amber-400 to-red-500 gold-glow leading-tight my-2">
+                KEJOHANAN OLAHRAGA DIRASMIKAN!
+            </h2>
+            
+            <p class="text-amber-200/90 text-sm sm:text-xl font-medium mt-4 tracking-wide">
+                Semangat Kesukanan • Keunggulan • Kejayaan
+            </p>
+        </div>
+    </div>
+
+    <!-- Skrin Permulaan (Overlay untuk memulakan AudioContext & Kamera) -->
+    <div id="start_overlay" class="fixed inset-0 z-40 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+        <div class="max-w-lg w-full p-8 rounded-3xl bg-gradient-to-b from-stone-900 to-red-950/60 border border-amber-500/50 box-gold-glow">
+            <div class="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-tr from-red-600 to-amber-400 flex items-center justify-center text-4xl shadow-lg animate-pulse-ring">
+                🔥
+            </div>
+            <h2 class="font-epic text-2xl sm:text-3xl font-bold text-amber-300 mb-3">
+                Gimik Penyalaan Obor Digital
+            </h2>
+            <p class="text-stone-300 text-sm sm:text-base mb-6 leading-relaxed">
+                1. Halakan tapak tangan anda ke kamera.<br>
+                2. <strong class="text-amber-300">Genggam jari (kecuali jari telunjuk)</strong> untuk menyalakan obor maya.<br>
+                3. Sentuh <strong class="text-red-400">Sumbu Kawah</strong> di tengah skrin selama <strong class="text-amber-300">3 saat</strong> untuk merasmikan kejohanan!
+            </p>
+            <button id="btn_start" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-yellow-400 text-black font-extrabold text-lg tracking-wider uppercase shadow-[0_0_20px_rgba(245,158,11,0.6)] transition transform hover:scale-[1.02] active:scale-95 cursor-pointer">
+                Mula Gimik & Aktifkan Kamera
+            </button>
+            <p id="loading_msg" class="hidden mt-4 text-amber-400 text-sm font-medium animate-pulse">
+                Memuatkan model AI MediaPipe Hands... Sila tunggu sebentar.
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer Panduan Ringkas -->
+    <footer class="relative z-20 pb-4 px-6 text-center pointer-events-none">
+        <div class="inline-flex flex-wrap justify-center items-center gap-4 px-5 py-2 rounded-2xl bg-black/60 border border-white/10 text-xs text-stone-300 backdrop-blur-sm">
+            <span>✊ <strong>Genggam Tangan</strong> = Nyalakan Obor Jari</span>
+            <span class="hidden sm:inline text-amber-500">•</span>
+            <span>🔥 <strong>Sentuh Kawah (3 Saat)</strong> = Letupan Perasmian</span>
+            <span class="hidden sm:inline text-amber-500">•</span>
+            <span>🖱️ <em>Tip: Klik & tahan tetikus pada kawah sebagai sandaran (backup)</em></span>
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * SISTEM AUDIO SINTETIK EPIK (WEB AUDIO API)
+         * Menghasilkan kesan bunyi tanpa memerlukan fail audio luaran:
+         * 1. Gemuruh Api (Fire Roar - Brown/Pink Noise bertapis)
+         * 2. Sorakan Stadium (Stadium Crowd Cheer - White Noise dengan modulasi bandpass)
+         * 3. Muzik Fanfare Kemenangan (Brass/Synth Fanfare Arpeggio)
+         */
+        class EpicSoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.isInitialized = false;
+                this.fireGain = null;
+            }
+
+            init() {
+                if (this.isInitialized) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.isInitialized = true;
+            }
+
+            // Bunyi api menyala perlahan semasa memegang obor
+            startTorchHum() {
+                if (!this.isInitialized || this.fireGain) return;
+                const bufferSize = this.ctx.sampleRate * 2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                let lastOut = 0.0;
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    data[i] = (lastOut + (0.02 * white)) / 1.02;
+                    lastOut = data[i];
+                    data[i] *= 3.5;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                noise.loop = true;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 180;
+
+                this.fireGain = this.ctx.createGain();
+                this.fireGain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+
+                noise.connect(filter);
+                filter.connect(this.fireGain);
+                this.fireGain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            setTorchIntensity(intensity) {
+                if (!this.fireGain || !this.ctx) return;
+                const targetGain = Math.min(0.4, Math.max(0.01, intensity * 0.35));
+                this.fireGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.1);
+            }
+
+            // Letupan Gemuruh Api Besar + Sorakan Stadium + Muzik Fanfare
+            triggerGrandInauguration() {
+                if (!this.isInitialized) this.init();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+
+                const now = this.ctx.currentTime;
+
+                // 1. GEMURUH API KAWAH (Deep Fire Whoosh & Roar)
+                this.playFireRoar(now, 8.0);
+
+                // 2. SORAKAN STADIUM (Crowd Roar)
+                this.playStadiumCheer(now + 0.3, 9.0);
+
+                // 3. MUZIK FANFARE KEMENANGAN (Olympic Style Brass Fanfare)
+                this.playVictoryFanfare(now + 0.2);
+            }
+
+            playFireRoar(startTime, duration) {
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                let lastOut = 0;
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    data[i] = (lastOut + (0.04 * white)) / 1.04;
+                    lastOut = data[i];
+                    data[i] *= 2.5;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(100, startTime);
+                filter.frequency.exponentialRampToValueAtTime(650, startTime + 0.6);
+                filter.frequency.exponentialRampToValueAtTime(220, startTime + duration);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.01, startTime);
+                gain.gain.linearRampToValueAtTime(0.8, startTime + 0.4);
+                gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(startTime);
+            }
+
+            playStadiumCheer(startTime, duration) {
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * 0.6;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                // Penapis bandpass untuk meniru suara sorakan manusia ramai
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(850, startTime);
+                filter.Q.value = 0.7;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.001, startTime);
+                gain.gain.linearRampToValueAtTime(0.45, startTime + 1.2);
+                gain.gain.setValueAtTime(0.45, startTime + duration - 2.5);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(startTime);
+            }
+
+            playVictoryFanfare(startTime) {
+                // Not Fanfare Kemenangan dalam C Major / G Major (Heroic Brass Progression)
+                const notes = [
+                    { freq: 261.63, time: 0.0, dur: 0.25 }, // C4
+                    { freq: 329.63, time: 0.25, dur: 0.25 }, // E4
+                    { freq: 392.00, time: 0.50, dur: 0.25 }, // G4
+                    { freq: 523.25, time: 0.75, dur: 0.65 }, // C5
+                    { freq: 392.00, time: 1.45, dur: 0.25 }, // G4
+                    { freq: 523.25, time: 1.75, dur: 1.40 }, // C5 (Panjang)
+                    { freq: 659.25, time: 1.75, dur: 1.40 }, // E5 Harmoni
+                    { freq: 783.99, time: 1.75, dur: 1.40 }  // G5 Harmoni
+                ];
+
+                notes.forEach(n => {
+                    this.playBrassNote(n.freq, startTime + n.time, n.dur);
+                });
+            }
+
+            playBrassNote(freq, start, duration) {
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                osc1.type = 'sawtooth';
+                osc2.type = 'triangle';
+                osc1.frequency.setValueAtTime(freq, start);
+                osc2.frequency.setValueAtTime(freq * 1.003, start); // Sedikit detune untuk kesan orkestra
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, start);
+                filter.frequency.exponentialRampToValueAtTime(2400, start + 0.15);
+                filter.frequency.exponentialRampToValueAtTime(1200, start + duration);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.001, start);
+                gain.gain.linearRampToValueAtTime(0.22, start + 0.08);
+                gain.gain.setValueAtTime(0.18, start + duration - 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, start + duration + 0.2);
+
+                osc1.connect(filter);
+                osc2.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc1.start(start);
+                osc2.start(start);
+                osc1.stop(start + duration + 0.25);
+                osc2.stop(start + duration + 0.25);
+            }
+
+            playFireworkPop() {
+                if (!this.isInitialized) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(160 + Math.random() * 80, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.35);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.36);
+            }
+        }
+
+        /**
+         * SISTEM ZARAH (API OBOR, API KAWAH & BUNGA API BERSKALA BESAR)
+         */
+        class FireParticle {
+            constructor(x, y, scale = 1, isCauldron = false) {
+                this.x = x + (Math.random() - 0.5) * 18 * scale;
+                this.y = y + (Math.random() - 0.5) * 10 * scale;
+                this.vx = (Math.random() - 0.5) * (isCauldron ? 3.5 : 1.8) * scale;
+                this.vy = -(Math.random() * 4 + 2.5) * scale;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.025 + 0.018;
+                this.size = (Math.random() * 14 + 8) * scale;
+                // Warna api: Putih -> Kuning Emas -> Oren -> Merah Menyala
+                this.hue = Math.random() * 45 + 5; 
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.98;
+                this.life -= this.decay;
+                this.size *= 0.96;
+            }
+
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                gradient.addColorStop(0, `hsla(55, 100%, 85%, ${this.life})`);
+                gradient.addColorStop(0.4, `hsla(${this.hue}, 100%, 55%, ${this.life * 0.8})`);
+                gradient.addColorStop(1, `hsla(0, 100%, 30%, 0)`);
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class FireworkSpark {
+            constructor(x, y, colorHue) {
+                this.x = x;
+                this.y = y;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 11 + 3;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.gravity = 0.14;
+                this.friction = 0.96;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.015 + 0.008;
+                this.hue = colorHue + (Math.random() * 25 - 12);
+                this.size = Math.random() * 3.5 + 1.5;
+                this.trail = [];
+            }
+
+            update() {
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > 5) this.trail.shift();
+
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                
+                // Jejak kilauan bunga api
+                if (this.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                    for (let i = 1; i < this.trail.length; i++) {
+                        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                    }
+                    ctx.strokeStyle = `hsla(${this.hue}, 100%, 65%, ${this.life * 0.6})`;
+                    ctx.lineWidth = this.size;
+                    ctx.stroke();
+                }
+
+                // Kepala zarah bersinar
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 80%, ${this.life})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Elemen DOM & Pembolehubah Keadaan Global
+        const videoElement = document.getElementById('input_video');
+        const canvas = document.getElementById('main_canvas');
+        const ctx = canvas.getContext('2d');
+        const soundEngine = new EpicSoundEngine();
+
+        const btnStart = document.getElementById('btn_start');
+        const startOverlay = document.getElementById('start_overlay');
+        const loadingMsg = document.getElementById('loading_msg');
+        const statusText = document.getElementById('status_text');
+        const bannerEl = document.getElementById('inauguration_banner');
+        const btnToggleBg = document.getElementById('btn_toggle_bg');
+        const bgText = document.getElementById('bg_text');
+        const bgIcon = document.getElementById('bg_icon');
+        const btnReset = document.getElementById('btn_reset');
+
+        let useWebcamBg = true;
+        let isHandTrackingReady = false;
+        let isTorchActive = false;
+        let fingerTipPos = { x: 0, y: 0 };
+        
+        // Keadaan Kawah Obor & Pemasa 3 Saat
+        let holdProgress = 0; // 0.0 hingga 3.0 saat
+        const REQUIRED_HOLD_SECONDS = 3.0;
+        let isInaugurated = false;
+        let lastFrameTime = performance.now();
+        let fireworkTimer = 0;
+
+        // Senarai Zarah
+        let fireParticles = [];
+        let fireworkSparks = [];
+
+        // Kawalan Sandaran Tetikus / Sentuhan Skrin (Jika pencahayaan bilik kurang sesuai untuk kamera)
+        let isPointerDown = false;
+        let pointerPos = { x: 0, y: 0 };
+
+        // Penyesuaian Saiz Kanvas Responsif
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Tukar Mod Latar Belakang (Kamera Langsung vs Pentas Epik)
+        btnToggleBg.addEventListener('click', () => {
+            useWebcamBg = !useWebcamBg;
+            if (useWebcamBg) {
+                bgText.textContent = "Mod: Kamera Langsung";
+                bgIcon.textContent = "🎥";
+            } else {
+                bgText.textContent = "Mod: Pentas Digital";
+                bgIcon.textContent = "🏟️";
+            }
+        });
+
+        // Butang Set Semula Gimik
+        btnReset.addEventListener('click', () => {
+            isInaugurated = false;
+            holdProgress = 0;
+            fireworkSparks = [];
+            bannerEl.classList.add('hidden');
+            updateStatus("Genggam tangan (tunjuk jari telunjuk) & sentuh sumbu kawah selama 3 saat!", "amber");
+        });
+
+        // Kawalan Sandaran Tetikus / Sentuhan
+        canvas.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            pointerPos = { x: e.clientX, y: e.clientY };
+        });
+        canvas.addEventListener('pointermove', (e) => {
+            if (isPointerDown) {
+                pointerPos = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('pointerup', () => {
+            isPointerDown = false;
+        });
+
+        function updateStatus(text, type = "amber") {
+            const dotColor = type === "green" ? "bg-emerald-400" : (type === "red" ? "bg-red-500" : "bg-amber-400");
+            statusText.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full ${dotColor} animate-ping"></span> ${text}`;
+        }
+
+        /**
+         * LOGIK PENGESANAN GENGGAMAN TANGAN & OBOR MAYA (MEDIAPIPE HANDS)
+         */
+        function detectFistWithIndexTorch(landmarks) {
+            // Indeks landmark MediaPipe Hands:
+            // 0: Wrist, 8: Index Tip, 6: Index PIP
+            // 12: Middle Tip, 10: Middle PIP
+            // 16: Ring Tip, 14: Ring PIP
+            // 20: Pinky Tip, 18: Pinky PIP
+            const wrist = landmarks[0];
+
+            const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+            // Semak sama ada jari tengah, manis, dan kelingking digenggam (hujung jari lebih dekat ke pergelangan tangan berbanding sendi tengah)
+            const middleCurled = dist(landmarks[12], wrist) < dist(landmarks[10], wrist) * 1.15;
+            const ringCurled = dist(landmarks[16], wrist) < dist(landmarks[14], wrist) * 1.15;
+            const pinkyCurled = dist(landmarks[20], wrist) < dist(landmarks[18], wrist) * 1.15;
+
+            // Jari telunjuk dinaikkan / dihulurkan untuk memegang obor
+            const indexExtended = dist(landmarks[8], wrist) > dist(landmarks[6], wrist) * 1.05;
+
+            // Terima juga genggaman penuh (penumbuk) sebagai obor
+            const curledCount = [middleCurled, ringCurled, pinkyCurled].filter(Boolean).length;
+            return curledCount >= 2 && (indexExtended || curledCount === 3);
+        }
+
+        function onHandResults(results) {
+            if (!isHandTrackingReady) {
+                isHandTrackingReady = true;
+                startOverlay.classList.add('hidden');
+                updateStatus("Genggam tangan (hulur jari telunjuk) & sentuh sumbu kawah selama 3 saat!", "amber");
+            }
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const isFistTorch = detectFistWithIndexTorch(landmarks);
+
+                // Koordinat hujung jari telunjuk (Landmark 8), dicerminkan secara mendatar (mirror)
+                const tip = landmarks[8];
+                fingerTipPos.x = (1 - tip.x) * canvas.width;
+                fingerTipPos.y = tip.y * canvas.height;
+
+                isTorchActive = isFistTorch;
+            } else {
+                isTorchActive = false;
+            }
+        }
+
+        // Mulakan MediaPipe Hands apabila butang ditekan
+        btnStart.addEventListener('click', async () => {
+            btnStart.disabled = true;
+            btnStart.classList.add('opacity-50');
+            loadingMsg.classList.remove('hidden');
+
+            try {
+                soundEngine.init();
+                soundEngine.startTorchHum();
+
+                const hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.65,
+                    minTrackingConfidence: 0.65
+                });
+
+                hands.onResults(onHandResults);
+
+                const camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await hands.send({ image: videoElement });
+                    },
+                    width: 1280,
+                    height: 720
+                });
+
+                await camera.start();
+            } catch (err) {
+                console.error("Ralat kamera:", err);
+                // Jika kamera disekat/tiada, teruskan dalam Mod Pentas Digital dengan kawalan tetikus/sentuhan
+                useWebcamBg = false;
+                bgText.textContent = "Mod: Pentas Digital";
+                bgIcon.textContent = "🏟️";
+                startOverlay.classList.add('hidden');
+                updateStatus("Kamera tidak dikesan. Klik & tahan pada sumbu kawah selama 3 saat!", "amber");
+            }
+        });
+
+        /**
+         * LUKISAN KAWAH OBOR DIGITAL EPİK DI TENGAH SKRIN
+         */
+        function drawDigitalCauldron(cx, cy, radius, progressRatio, ignited) {
+            ctx.save();
+
+            // 1. Tiang / Tapak Monumen Kawah (Gold & Crimson Metallic)
+            const baseGrad = ctx.createLinearGradient(cx - radius * 1.2, cy, cx + radius * 1.2, cy + radius * 2.5);
+            baseGrad.addColorStop(0, '#450a0a');
+            baseGrad.addColorStop(0.5, '#b45309');
+            baseGrad.addColorStop(1, '#1c1917');
+
+            ctx.fillStyle = baseGrad;
+            ctx.beginPath();
+            ctx.moveTo(cx - radius * 0.55, cy + radius * 0.65);
+            ctx.lineTo(cx + radius * 0.55, cy + radius * 0.65);
+            ctx.lineTo(cx + radius * 0.95, canvas.height);
+            ctx.lineTo(cx - radius * 0.95, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // Jalur hiasan emas pada tiang
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // 2. Mangkuk Kawah Utama
+            const bowlGrad = ctx.createRadialGradient(cx, cy + 10, radius * 0.1, cx, cy + 20, radius * 1.3);
+            bowlGrad.addColorStop(0, '#fbbf24');
+            bowlGrad.addColorStop(0.45, '#b91c1c');
+            bowlGrad.addColorStop(0.85, '#450a0a');
+            bowlGrad.addColorStop(1, '#09090b');
+
+            ctx.fillStyle = bowlGrad;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + radius * 0.25, radius * 1.25, radius * 0.75, 0, 0, Math.PI);
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#f59e0b';
+            ctx.stroke();
+
+            // 3. Bibir Atas Kawah (Zon Sumbu)
+            ctx.fillStyle = ignited ? '#fef08a' : '#292524';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + radius * 0.2, radius * 1.25, radius * 0.28, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#fbbf24';
+            ctx.stroke();
+
+            // 4. Sumbu Tengah Kawah (Sasaran Sentuhan)
+            const wickPulse = Math.sin(performance.now() * 0.006) * 4;
+            const targetRadius = radius * 0.55 + wickPulse;
+
+            if (!ignited) {
+                // Gelung Sasaran Interaktif
+                ctx.beginPath();
+                ctx.arc(cx, cy, targetRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = progressRatio > 0 ? '#fde047' : 'rgba(251, 191, 36, 0.65)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Gelung Kemajuan 3 Saat (Progress Arc)
+                if (progressRatio > 0) {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, targetRadius + 10, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progressRatio));
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 8;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, targetRadius + 10, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progressRatio));
+                    ctx.strokeStyle = '#fde047';
+                    ctx.lineWidth = 4;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+
+                // Teks Panduan pada Kawah
+                ctx.fillStyle = '#fef3c7';
+                ctx.font = 'bold 14px Montserrat, sans-serif';
+                ctx.textAlign = 'center';
+                const label = progressRatio > 0 
+                    ? `MENYALAKAN... ${(progressRatio * 3).toFixed(1)}s / 3.0s` 
+                    : "SUMBU KAWAH";
+                ctx.fillText(label, cx, cy - targetRadius - 18);
+            }
+
+            ctx.restore();
+        }
+
+        /**
+         * LUKISAN LATAR BELAKANG PENTAS EPİK (JIKA MOD PENTAS DIPILIH)
+         */
+        function drawEpicStageBackground() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const grad = ctx.createRadialGradient(w * 0.5, h * 0.55, 40, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+            grad.addColorStop(0, '#7f1d1d');
+            grad.addColorStop(0.45, '#2a0606');
+            grad.addColorStop(1, '#070202');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+
+            // Pancaran Lampu Sorot Stadium (Spotlights)
+            const time = performance.now() * 0.001;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = -1; i <= 1; i += 2) {
+                const beamAngle = Math.sin(time + i) * 0.25;
+                const startX = w * 0.5 + i * (w * 0.35);
+                const beamGrad = ctx.createLinearGradient(startX, h, w * 0.5, 0);
+                beamGrad.addColorStop(0, 'rgba(251, 191, 36, 0.14)');
+                beamGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+
+                ctx.fillStyle = beamGrad;
+                ctx.beginPath();
+                ctx.moveTo(startX - 30, h);
+                ctx.lineTo(startX + 30, h);
+                ctx.lineTo(w * 0.5 + Math.sin(beamAngle) * 350 + 180, 0);
+                ctx.lineTo(w * 0.5 + Math.sin(beamAngle) * 350 - 180, 0);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        /**
+         * MENCETUSKAN LETUPAN BUNGA API ZARAH BERSKALA BESAR
+         */
+        function spawnFireworkBurst(x, y) {
+            // Palet warna epik: Emas (45), Merah Menyala (0), Oren Api (25), Putih Kilauan (55)
+            const hues = [45, 0, 22, 52, 350];
+            const chosenHue = hues[Math.floor(Math.random() * hues.length)];
+            const sparkCount = 95;
+            for (let i = 0; i < sparkCount; i++) {
+                fireworkSparks.push(new FireworkSpark(x, y, chosenHue));
+            }
+            soundEngine.playFireworkPop();
+        }
+
+        /**
+         * GELUNG ANIMASI UTAMA (60 FPS)
+         */
+        function animate(now) {
+            const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Papar Video Webcam atau Pentas Epik
+            if (useWebcamBg && videoElement.readyState >= 2) {
+                ctx.save();
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                // Kekalkan nisbah aspek video memenuhi skrin (cover)
+                const vidRatio = videoElement.videoWidth / videoElement.videoHeight;
+                const canRatio = canvas.width / canvas.height;
+                let drawW = canvas.width, drawH = canvas.height, offsetX = 0, offsetY = 0;
+                if (canRatio > vidRatio) {
+                    drawH = canvas.width / vidRatio;
+                    offsetY = (canvas.height - drawH) / 2;
+                } else {
+                    drawW = canvas.height * vidRatio;
+                    offsetX = (canvas.width - drawW) / 2;
+                }
+                ctx.drawImage(videoElement, offsetX, offsetY, drawW, drawH);
+                ctx.restore();
+
+                // Lapisan tint gelap merah-emas agar kawah dan api lebih menyerlah
+                ctx.fillStyle = 'rgba(20, 4, 4, 0.35)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            } else {
+                drawEpicStageBackground();
+            }
+
+            // 2. Kedudukan Kawah Obor di Tengah Skrin
+            const cauldronX = canvas.width * 0.5;
+            const cauldronY = canvas.height * 0.62;
+            const cauldronRadius = Math.min(canvas.width, canvas.height) * 0.13;
+
+            // Tentukan kedudukan aktif penunjuk (Jari Telunjuk MediaPipe atau Tetikus Sandaran)
+            let activeTorch = false;
+            let currentPos = { x: 0, y: 0 };
+
+            if (isTorchActive) {
+                activeTorch = true;
+                currentPos = fingerTipPos;
+            } else if (isPointerDown) {
+                activeTorch = true;
+                currentPos = pointerPos;
+            }
+
+            // 3. Lukis Kawah Obor
+            const progressRatio = Math.min(1, holdProgress / REQUIRED_HOLD_SECONDS);
+            drawDigitalCauldron(cauldronX, cauldronY, cauldronRadius, progressRatio, isInaugurated);
+
+            // 4. Jika Obor Maya Aktif pada Jari Telunjuk
+            if (activeTorch) {
+                soundEngine.setTorchIntensity(1.0);
+                // Jana zarah api di hujung jari telunjuk
+                for (let i = 0; i < 6; i++) {
+                    fireParticles.push(new FireParticle(currentPos.x, currentPos.y, 1.15, false));
+                }
+
+                // Lukis teras cahaya obor pada hujung jari
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                const glow = ctx.createRadialGradient(currentPos.x, currentPos.y, 2, currentPos.x, currentPos.y, 35);
+                glow.addColorStop(0, 'rgba(255, 255, 220, 0.95)');
+                glow.addColorStop(0.5, 'rgba(255, 140, 0, 0.6)');
+                glow.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(currentPos.x, currentPos.y, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+
+                // Semak jarak antara hujung jari obor dengan Sumbu Kawah
+                const distanceToWick = Math.hypot(currentPos.x - cauldronX, currentPos.y - cauldronY);
+                const hitThreshold = cauldronRadius * 0.95;
+
+                if (!isInaugurated) {
+                    if (distanceToWick <= hitThreshold) {
+                        holdProgress += dt;
+                        // Tambah percikan api semasa menyentuh sumbu
+                        for (let i = 0; i < 5; i++) {
+                            fireParticles.push(new FireParticle(cauldronX, cauldronY, 1.4, true));
+                        }
+                        updateStatus(`Tahan obor pada kawah... ${Math.min(3.0, holdProgress).toFixed(1)} / 3.0 saat`, "green");
+
+                        // Cetuskan Perasmian apabila mencapai 3 saat!
+                        if (holdProgress >= REQUIRED_HOLD_SECONDS) {
+                            isInaugurated = true;
+                            bannerEl.classList.remove('hidden');
+                            updateStatus("KEJOHANAN OLAHRAGA TELAH DIRASMIKAN!", "green");
+                            soundEngine.triggerGrandInauguration();
+
+                            // Letupan awal berskala besar di seluruh langit
+                            for (let b = 0; b < 6; b++) {
+                                setTimeout(() => {
+                                    spawnFireworkBurst(
+                                        canvas.width * (0.15 + Math.random() * 0.7),
+                                        canvas.height * (0.15 + Math.random() * 0.4)
+                                    );
+                                }, b * 280);
+                            }
+                        }
+                    } else {
+                        // Susut perlahan jika terkeluar dari sumbu
+                        holdProgress = Math.max(0, holdProgress - dt * 1.5);
+                        updateStatus("Obor menyala! Gerakkan hujung jari ke Sumbu Kawah di tengah.", "amber");
+                    }
+                }
+            } else {
+                soundEngine.setTorchIntensity(0.0);
+                if (!isInaugurated) {
+                    holdProgress = Math.max(0, holdProgress - dt * 1.5);
+                }
+            }
+
+            // 5. Jika Kawah Telah Dinyalakan (Api Kawah Besar + Bunga Api Berterusan)
+            if (isInaugurated) {
+                // Api kawah marak menjulang tinggi
+                for (let i = 0; i < 12; i++) {
+                    fireParticles.push(new FireParticle(cauldronX, cauldronY - 10, 2.3, true));
+                }
+
+                // Bunga api berkala di bahagian atas skrin
+                fireworkTimer += dt;
+                if (fireworkTimer >= 0.65) {
+                    fireworkTimer = 0;
+                    spawnFireworkBurst(
+                        canvas.width * (0.12 + Math.random() * 0.76),
+                        canvas.height * (0.12 + Math.random() * 0.38)
+                    );
+                }
+            }
+
+            // 6. Kemas kini & Lukis Semua Zarah Api
+            for (let i = fireParticles.length - 1; i >= 0; i--) {
+                fireParticles[i].update();
+                fireParticles[i].draw(ctx);
+                if (fireParticles[i].life <= 0) {
+                    fireParticles.splice(i, 1);
+                }
+            }
+
+            // 7. Kemas kini & Lukis Semua Zarah Bunga Api
+            for (let i = fireworkSparks.length - 1; i >= 0; i--) {
+                fireworkSparks[i].update();
+                fireworkSparks[i].draw(ctx);
+                if (fireworkSparks[i].life <= 0) {
+                    fireworkSparks.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Mulakan gelung animasi sebaik sahaja halaman dimuatkan
+        window.onload = () => {
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
